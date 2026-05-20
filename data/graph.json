@@ -1,0 +1,84 @@
+{
+  "edges": {
+    "login": [
+      "fetch_user",
+      "create_session"
+    ],
+    "fetch_user": [
+      "query_db"
+    ],
+    "query_db": [],
+    "create_session": [
+      "generate_token"
+    ],
+    "generate_token": [
+      "str"
+    ],
+    "add": [],
+    "multiply": [
+      "add"
+    ],
+    "calculate": [
+      "multiply",
+      "add"
+    ]
+  },
+  "features": {
+    "login": {
+      "file": "auth.py",
+      "cyclomatic": 2,
+      "loc": 5,
+      "in_degree": 0,
+      "out_degree": 2
+    },
+    "fetch_user": {
+      "file": "auth.py",
+      "cyclomatic": 1,
+      "loc": 2,
+      "in_degree": 1,
+      "out_degree": 1
+    },
+    "query_db": {
+      "file": "auth.py",
+      "cyclomatic": 1,
+      "loc": 2,
+      "in_degree": 1,
+      "out_degree": 0
+    },
+    "create_session": {
+      "file": "auth.py",
+      "cyclomatic": 1,
+      "loc": 3,
+      "in_degree": 1,
+      "out_degree": 1
+    },
+    "generate_token": {
+      "file": "auth.py",
+      "cyclomatic": 1,
+      "loc": 2,
+      "in_degree": 1,
+      "out_degree": 0
+    },
+    "add": {
+      "file": "example.py",
+      "cyclomatic": 1,
+      "loc": 2,
+      "in_degree": 2,
+      "out_degree": 0
+    },
+    "multiply": {
+      "file": "example.py",
+      "cyclomatic": 1,
+      "loc": 3,
+      "in_degree": 1,
+      "out_degree": 1
+    },
+    "calculate": {
+      "file": "example.py",
+      "cyclomatic": 1,
+      "loc": 4,
+      "in_degree": 0,
+      "out_degree": 2
+    }
+  }
+}
