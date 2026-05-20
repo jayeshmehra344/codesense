@@ -4,7 +4,7 @@ import networkx as nx
 import json 
 
 def parse_file(filepath):
-    with open(filepath, 'r') as f:
+    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
         source = f.read()
     tree = ast.parse(source)    
     return tree
