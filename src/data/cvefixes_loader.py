@@ -1,41 +1,36 @@
 import ast
+import re
 import sys
 import os
 from datasets import load_dataset
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'graph'))
 from db import get_db
-# debug - see what fields exist
-print("Sample record keys:", list(dataset[0].keys()))
-print("Sample record:", dataset[0])
+
 def extract_functions_from_code(source_code):
-    """
-    Given raw Python source code as string,
-    extract all function names.
-    """
+    def _walk_ast(tree):
+        return [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+
     try:
-        tree = ast.parse(source_code)
-        functions = []
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
-                functions.append(node.name)
-        return functions
-    except Exception:
-        return []
+        return _walk_ast(ast.parse(source_code))
+    except SyntaxError:
+        pass
+
+    try:
+        indented = "\n".join("    " + line for line in source_code.splitlines())
+        return _walk_ast(ast.parse(f"def _wrapper():\n{indented}"))
+    except SyntaxError:
+        pass
+
+    return re.findall(r"^\s*def\s+([a-zA-Z_]\w*)\s*\(", source_code, re.MULTILINE)
 
 def load_cvefixes(limit=5000):
-    """
-    Loads CVEfixes from HuggingFace.
-    Extracts Python functions labeled as vulnerable (risky=1)
-    and fixed (risky=0).
-    Saves to MongoDB.
-    """
     print("loading CVEfixes dataset from HuggingFace...")
     dataset = load_dataset("hitoshura25/cvefixes", split="train")
-    
+
     db = get_db()
     collection = db["labeled_functions"]
-    
+
     inserted = 0
     skipped = 0
 
@@ -43,8 +38,8 @@ def load_cvefixes(limit=5000):
         if inserted >= limit:
             break
 
-        # only process Python files
-        lang = record.get("programming_language", "")
+        # field is 'language' not 'programming_language'
+        lang = record.get("language", "")
         if lang.lower() != "python":
             skipped += 1
             continue
@@ -56,7 +51,6 @@ def load_cvefixes(limit=5000):
             skipped += 1
             continue
 
-        # extract functions from vulnerable version → risky = 1
         vuln_functions = extract_functions_from_code(vulnerable_code)
         for func_name in vuln_functions:
             collection.insert_one({
@@ -64,11 +58,10 @@ def load_cvefixes(limit=5000):
                 "source": "cvefixes",
                 "label": 1,
                 "code": vulnerable_code,
-                "repo": record.get("repo_name", "unknown")
+                "repo": record.get("repo_url", "unknown")
             })
             inserted += 1
 
-        # extract functions from fixed version → risky = 0
         fixed_functions = extract_functions_from_code(fixed_code)
         for func_name in fixed_functions:
             collection.insert_one({
@@ -76,7 +69,7 @@ def load_cvefixes(limit=5000):
                 "source": "cvefixes",
                 "label": 0,
                 "code": fixed_code,
-                "repo": record.get("repo_name", "unknown")
+                "repo": record.get("repo_url", "unknown")
             })
 
     print(f"inserted {inserted} vulnerable functions")
