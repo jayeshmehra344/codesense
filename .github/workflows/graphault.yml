@@ -1,0 +1,112 @@
+name: Graphault Risk Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Advisory only — read PR metadata + post a comment, never set a status check
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  analyze:
+    name: Scan changed Python functions
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout with full history so git diff can compare base..head ──
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── 2. Python + pip cache ─────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip (inference deps only)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: graphault-${{ runner.os }}-torch-cpu
+          restore-keys: graphault-${{ runner.os }}-
+
+      # torch CPU wheel is ~200 MB — cache makes re-runs fast
+      - name: Install inference dependencies
+        run: |
+          pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --quiet torch_geometric fastapi "uvicorn[standard]" pydantic requests
+
+      # ── 3. Detect changed .py files in the PR ────────────────────────────
+      - name: Find changed Python files
+        id: changed
+        run: |
+          # Added / Copied / Modified .py files only — not deletions
+          FILES=$(git diff --diff-filter=ACM --name-only \
+            "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" \
+            | grep '\.py$' || true)
+
+          # Write to a file so the Python script can read it without multiline env pain
+          echo "$FILES" > changed_files.txt
+          echo "--- changed Python files ---"
+          cat changed_files.txt
+
+          if [ -z "$FILES" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── 4. Start the FastAPI server (model.pt is committed) ──────────────
+      - name: Start API server
+        if: steps.changed.outputs.has_changes == 'true'
+        run: |
+          nohup uvicorn src.api.app:app --port 8000 --workers 1 \
+            > /tmp/server.log 2>&1 &
+          echo $! > /tmp/server.pid
+
+          echo "Polling for server readiness..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "Server ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
+          # Hard-fail if server never came up
+          curl -sf http://localhost:8000/health \
+            || { echo "Server failed to start"; cat /tmp/server.log; exit 1; }
+
+      # ── 5. Run the analysis script ────────────────────────────────────────
+      - name: Analyze functions
+        if: steps.changed.outputs.has_changes == 'true'
+        run: python scripts/run_analysis.py --files changed_files.txt
+
+      # ── 6. Post PR comment (human-gated, never blocks merge) ─────────────
+      - name: Post PR comment
+        if: steps.changed.outputs.has_changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('analysis_comment.md')) {
+              console.log('analysis_comment.md not found — skipping comment');
+              return;
+            }
+            const body = fs.readFileSync('analysis_comment.md', 'utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+            console.log('Risk analysis comment posted.');
+
+      - name: Skip (no Python files changed)
+        if: steps.changed.outputs.has_changes == 'false'
+        run: echo "No Python files changed in this PR — analysis skipped."
