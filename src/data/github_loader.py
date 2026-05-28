@@ -187,7 +187,7 @@ def _get_closing_commit(repo_full_name, issue_number):
     Tries three strategies in order:
     1. Direct close event with commit_id (push directly closed the issue).
     2. Referenced event with commit_id (commit message contained 'fixes #N').
-    3. Cross-referenced merged PR via the timeline API — the common case where
+    3. Cross-referenced merged PR via the timeline API - the common case where
        a PR description says 'closes #N' and the merge commit is what we want.
     """
     resp = _gh_get(f"{BASE_URL}/repos/{repo_full_name}/issues/{issue_number}/events")
@@ -245,9 +245,9 @@ def _clone_repo(repo_full_name, default_branch):
 def _process_commit(repo_full_name, commit_sha, repo_name, collection):
     """
     For each Python file changed in commit_sha:
-      - old file (parent): functions overlapping changed lines → label=1 (buggy)
-                           functions not overlapping             → label=0 (clean)
-      - new file (commit): functions overlapping changed lines → label=0 (fixed)
+      - old file (parent): functions overlapping changed lines -> label=1 (buggy)
+                           functions not overlapping             -> label=0 (clean)
+      - new file (commit): functions overlapping changed lines -> label=0 (fixed)
     Returns number of label=1 insertions.
     """
     resp = _gh_get(f"{BASE_URL}/repos/{repo_full_name}/commits/{commit_sha}")
@@ -347,7 +347,7 @@ def load_github(max_repos=1000, bugs_per_repo=15):
         visited.add(repo_full_name)
 
         overall = already_with_bugs + newly_with_bugs + 1
-        print(f"[{overall}/{max_repos}] {repo_full_name} ({repo_data['stargazers_count']}★)", end=" ", flush=True)
+        print(f"[{overall}/{max_repos}] {repo_full_name} ({repo_data['stargazers_count']}*)", end=" ", flush=True)
 
         issues_resp = _gh_get(
             f"{BASE_URL}/repos/{repo_full_name}/issues",
@@ -356,17 +356,17 @@ def load_github(max_repos=1000, bugs_per_repo=15):
         time.sleep(0.5)
 
         if issues_resp is None:
-            print("→ API error, skipping")
+            print("-> API error, skipping")
             _save_checkpoint(db, repo_full_name, 0, had_bugs=False)
             continue
 
         issues = issues_resp.json()
         if not isinstance(issues, list) or not issues:
-            print("→ no closed bug issues")
+            print("-> no closed bug issues")
             _save_checkpoint(db, repo_full_name, 0, had_bugs=False)
             continue
 
-        print(f"→ {len(issues)} bug issues found")
+        print(f"-> {len(issues)} bug issues found")
         _clone_repo(repo_full_name, repo_data.get("default_branch", "main"))
 
         repo_inserted = 0
@@ -380,7 +380,7 @@ def load_github(max_repos=1000, bugs_per_repo=15):
             total_inserted += n
             time.sleep(0.5)
 
-        print(f"  → inserted {repo_inserted} buggy functions")
+        print(f"  -> inserted {repo_inserted} buggy functions")
         _save_checkpoint(db, repo_full_name, repo_inserted, had_bugs=True)
         newly_with_bugs += 1
 
